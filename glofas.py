@@ -26,7 +26,7 @@ VN_TZ = pytz.timezone("Asia/Ho_Chi_Minh")
 
 # Bounding box for Gia Lai region
 # Format [N, W, S, E]
-GIA_LAI_BBOX = [14.9, 107.0, 12.8, 109.3]
+GIA_LAI_BBOX = [14.9, 107.0, 12.8, 109.5]
 
 GRIB_TEMPLATE = "glofas_forecast_gialai_{date}.grib"
 
@@ -54,8 +54,8 @@ def download_glofas_forecast():
     """
 
     now_vn = datetime.now(VN_TZ)
-    # date_key = now_vn.strftime("%Y%m%d")
-    date_key = 20251119
+    date_key = now_vn.strftime("%Y%m%d")
+    # date_key = 20251119
 
     grib_path = GRIB_TEMPLATE.format(date=date_key)
 
