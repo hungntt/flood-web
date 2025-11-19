@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GloFAS Flood Monitor Gia Lai</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .legend {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            font-family: Arial, sans-serif;
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            z-index: 1000;
+        }
+
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 6px 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            font-family: Arial, sans-serif;
+        }
+
+        .leaflet-control-custom {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="map"></div>
+
+    <div class="legend">
+        <h4>24 Hour Forecast Risk</h4>
+        <div><span style="color:purple; font-size: 1.5em">●</span>High danger</div>
+        <div><span style="color:red; font-size: 1.5em">●</span>Danger</div>
+        <div><span style="color:orange; font-size: 1.5em">●</span>Warning</div>
+        <div><span style="color:gray; font-size: 1.5em">●</span> Low or normal risk no fill</div>
+    </div>
+
+    <div id="controls" class="controls">
+        <label>
+            <input type="checkbox" id="toggleForecast">
+            Show custom GloFAS forecast
+        </label>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        var map = L.map('map').setView([13.9, 108.2], 8)
+
+        var baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'OpenStreetMap contributors'
+        }).addTo(map)
+
+        var wmsLayer = L.tileLayer.wms('https://ows.globalfloods.eu/glofas-ows/', {
+            layers: 'ProbabilisticFloodMap',
+            format: 'image/png',
+            transparent: true,
+            version: '1.3.0',
+            attribution: 'Copernicus EMS GloFAS',
+            opacity: 0.5
+        }).addTo(map)
+
+        var customForecastLayer = null
+
+        function createCustomForecastLayer(data) {
+            return L.geoJSON(data, {
+                style: function (feature) {
+                    var riskLevel = feature.properties.risk_level
+                    var color = feature.properties.risk_color
+
+                    if (riskLevel === "1") {
+                        return {
+                            fillColor: color,
+                            color: color,
+                            weight: 1,
+                            fillOpacity: 0.0
+                        }
+                    }
+
+                    return {
+                        fillColor: color,
+                        color: color,
+                        weight: 0,
+                        fillOpacity: 0.6
+                    }
+                },
+                onEachFeature: function (feature, layer) {
+                    var popupContent = `
+                        <strong>Forecast cell</strong><br>
+                        Max discharge ${feature.properties.discharge} m³ per s<br>
+                        Max risk greater than ${feature.properties.risk_level} year flood proxy
+                    `
+                    layer.bindPopup(popupContent)
+                }
+            })
+        }
+
+        function loadForecastOnce() {
+            var dataPath = 'processed_forecast.json'
+
+            return fetch(dataPath)
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Status ' + response.status + ' could not load processed_forecast.json')
+                    }
+                    return response.json()
+                })
+                .then(function (data) {
+                    customForecastLayer = createCustomForecastLayer(data)
+                    customForecastLayer.addTo(map)
+                    console.log('Loaded ' + data.features.length + ' forecast cells')
+                })
+                .catch(function (error) {
+                    console.error('Error loading GeoJSON data', error)
+                    L.marker(map.getCenter()).addTo(map)
+                        .bindPopup('Custom GeoJSON data not found or failed to load. Is the Flask server running')
+                        .openPopup()
+                })
+        }
+
+        function enableForecast() {
+            if (customForecastLayer) {
+                customForecastLayer.addTo(map)
+            } else {
+                loadForecastOnce()
+            }
+        }
+
+        function disableForecast() {
+            if (customForecastLayer) {
+                map.removeLayer(customForecastLayer)
+            }
+        }
+
+        var CustomControl = L.Control.extend({
+            options: {
+                position: 'topleft'
+            },
+            onAdd: function () {
+                var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom')
+                container.style.backgroundColor = 'white'
+                container.style.padding = '5px'
+                container.style.cursor = 'pointer'
+                container.innerHTML = '<strong style="color: blue">Reload page</strong>'
+
+                container.onclick = function () {
+                    window.location.reload()
+                }
+
+                return container
+            }
+        })
+
+        map.addControl(new CustomControl())
+
+        var baseMaps = {
+            "Standard": baseOSM
+        }
+
+        var overlayMaps = {
+            "GloFAS WMS Official": wmsLayer
+        }
+
+        L.control.layers(baseMaps, overlayMaps).addTo(map)
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.getElementById('toggleForecast')
+            if (!toggle) return
+
+            toggle.addEventListener('change', function (event) {
+                if (event.target.checked) {
+                    enableForecast()
+                } else {
+                    disableForecast()
+                }
+            })
+        })
+    </script>
+
+</body>
+
+</html>
